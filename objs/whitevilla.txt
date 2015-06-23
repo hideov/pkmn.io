@@ -1,0 +1,27 @@
+[
+  {
+    "type": "Person",
+    "name": "Mele",
+    "event": "personTalk",
+    "eventArgs": ["Oddio quanto sono grosso"],
+    "pic": "O",
+    "colour": "red",
+    "pos": { "x": 10, "y": 10 }
+  },
+  {
+    "type": "Person",
+    "name": "Maiolo",
+    "event": "trainer",
+    "team": [
+      {
+        "name": "undefined"
+      },
+      {
+        "name": "manolesta"
+      }
+    ],
+    "pic": "M",
+    "colour": "red",
+    "pos": { "x": 20, "y": 5 }
+  }
+]
