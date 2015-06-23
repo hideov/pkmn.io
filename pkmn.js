@@ -1,6 +1,6 @@
 /*
-  (C) Copyright Brock, Hideov 2015
-*/
+ * (C) Copyright Brock, Hideov 2015
+ */
 
 var fs = require('fs'),
     blessed = require('blessed'),
@@ -16,34 +16,35 @@ Tiles = [];
 
 Events = {};
 
-Events.nothing = function ()
+Events.nothing = function (caller, args)
 {
 }
 
-Events.battle = function (type)
+Events.battle = function (caller, args)
 {
-  this.type = type || "wild"; // types: wild, trainer
-  var chance = Math.random();
-  if (chance < 0.15)
+  this.type = (args && args[0] && args[0].type) ? args[0].type : "wild";
+  if (this.type === "wild")
   {
-    // wild pokemon appears
-    var n = Green.map.wild.length;
-    if (n <= 0)
-      return;
-    Green.map.wild[Math.floor(n*Math.random())].growl();
+    var chance = Math.random();
+    if (chance < 0.15)
+    {
+      // wild pokemon appears
+      var n = Green.map.wild.length;
+      if (n <= 0)
+        return;
+      Green.map.wild[Math.floor(n*Math.random())].growl();
+    }
+  }
+  else if (this.type === "trainer")
+  {
+    Utils.echo("battle " + JSON.stringify(caller.team))
   }
 }
 
-Events.trainer = function ()
+Events.personTalk = function (caller, args)
 {
-  Events.battle.call(this, "trainer");
-}
 
-Events.trainer.prototype = new Events.battle();
-
-Events.personTalk = function (args)
-{
-  //~ PKMNIO.Person.prototype.talk.apply(this,)
+  PKMNIO.Person.prototype.talk.apply(caller, args);
 }
 
 //-------------
@@ -52,19 +53,22 @@ TileTypes = {
   'g': {
     colour: 'green',
     pic: " ",
-    event: Events.battle,
+    event: "battle",
+    eventArgs: [{type: "wild"}],
     walkable: true,
   },
   '_': {
     colour: 'white',
     pic: " ",
-    event: Events.nothing,
+    event: "nothing",
+    eventArgs: [],
     walkable: true,
   },
   '#': {
     colour: 'brown',
     pic: " ",
-    event: Events.nothing,
+    event: "nothing",
+    eventArgs: [],
     walkable: false,
   }
 }
@@ -118,13 +122,13 @@ Utils.loadMap = function(map)
   {
     var o = objs[i]; // is my obj proto
     var r = new PKMNIO[o.type]({
-      name: o.name,
-      event: Events.nothing,
-      eventArgs: o.eventArgs,
-      pic: o.pic,
+      name: o.name || "thing/guy",
+      event: o.event || "nothing",
+      eventArgs: o.eventArgs || [],
+      pic: o.pic || " ",
+      pos: o.pos,
       colour: o.colour,
       team: o.team,
-      pos: o.pos
     });
     objects.push(r);
   }
@@ -170,51 +174,84 @@ Utils.initgfx = function ()
     Utils.echo("cane");
   });
 
-  SCR.key('right', function() {
-    Utils.echo('right');
+  SCR.key(['right', 'left', 'up', 'down'], function(ch, key) {
+    Utils.echo(key.name);
+    var k = key.name;
+    var map = Green.map;
     var x = Green.pos.x;
     var y = Green.pos.y;
-    if (x < Green.map.width - 1
-        && Green.map.tiles[y][x+1].walkable)
+    var dx = 0, dy = 0;
+    switch (k) {
+      case 'left':
+        dx = -1;
+        Green.pic = '<';
+        Green.orientation = 'left';
+        break;
+      case 'right':
+        dx = 1;
+        Green.pic = '>';
+        Green.orientation = 'right';
+        break;
+      case 'up':
+        dy = -1;
+        Green.pic = '^';
+        Green.orientation = 'up';
+        break;
+      case 'down':
+        dy = 1;
+        Green.pic = 'v';
+        Green.orientation = 'down';
+        break;
+    }
+
+    // check if the position exists
+    var walkable = x + dx >= 0 && x + dx < map.width 
+                && y + dy >= 0 && y + dy < map.height;
+    if (walkable)
     {
-      Green.move(1,0);
-      Green.map.tiles[y][x+1].event();
+      // check if tile is walkable
+      walkable = map.tiles[y+dy][x+dx].walkable;
+      // check if objs are walkable
+      var objs = map.getObjectsAtCoord(y+dy, x+dx);
+      for (var i = 0; i < objs.length; i++)
+        if (objs[i].pos.x === x+dx && objs[i].pos.y === y+dy)
+          walkable = walkable && objs[i].walkable;
+    }
+
+    if (walkable)
+    {
+      Green.move(dx, dy);
+      map.tiles[y+dy][x+dx].callEvent();
+    }
+    else
+    {
+      // still update orientation of player sprite
+      Green.move(0,0);
     }
   });
 
-  SCR.key('left', function() {
-    Utils.echo('left');
+  SCR.key(['z'], function (ch, key) {
+    var map = Green.map;
     var x = Green.pos.x;
     var y = Green.pos.y;
-    if (x > 0
-        && Green.map.tiles[y][x-1].walkable)
-    {
-      Green.move(-1,0);
-      Green.map.tiles[y][x-1].event();
+    var dx = 0, dy = 0;
+    switch (Green.orientation) {
+      case 'left':
+        dx = -1;
+        break;
+      case 'right':
+        dx = 1;
+        break;
+      case 'up':
+        dy = -1;
+        break;
+      case 'down':
+        dy = 1;
+        break;
     }
-  });
-
-  SCR.key('up', function() {
-    Utils.echo('up');
-    var x = Green.pos.x;
-    var y = Green.pos.y;
-    if (y > 0
-        && Green.map.tiles[y-1][x].walkable)
-    {
-      Green.move(0,-1);
-      Green.map.tiles[y-1][x].event();
-    }
-  });
-
-  SCR.key('down', function() {
-    Utils.echo('down');
-    var x = Green.pos.x;
-    var y = Green.pos.y;
-    if (y < Green.map.height - 1
-        && Green.map.tiles[y+1][x].walkable)
-    {
-      Green.move(0,1);
-      Green.map.tiles[y+1][x].event();
+    var objs = map.getObjectsAtCoord(y+dy, x+dx);
+    if (objs.length > 0) { // what should we do if there are more than one object?
+      objs[0].callEvent();
     }
   });
 
@@ -245,13 +282,14 @@ var Map = function (args)
       for (var x = 0; x < this.width; x++)
       {
         l.push(new PKMNIO.Tile({pos: {x: x, y: y}}));
+        l[x].setIndex(0);
       }
       this.tiles.push(l);
     }
   }
 }
 
-Map.prototype.draw = function ()
+Map.prototype.drawTiles = function ()
 {
   delete WORLD;
   WORLD = [];
@@ -276,11 +314,40 @@ Map.prototype.draw = function ()
     WORLD.push(l);
   }
 
+  SCR.render();
+}
+
+Map.prototype.drawObjects = function ()
+{
+  delete OBJECTS;
+  OBJECTS = []
+  for (var y = 0; y < this.height; y++)
+  {
+    var l = [];
+    for (var x = 0; x < this.width; x++)
+      l.push(undefined);
+    OBJECTS.push(l);
+  }
   // Draw objects
   for (var i = 0; i < this.objects.length; i++)
-    this.objects[i].draw()
+    this.objects[i].draw() // this places the object inside OBJECTS
+}
 
-  SCR.render();
+Map.prototype.getObjectsAtCoord = function (y, x)
+{
+  var res = [];
+  var o;
+  for (var i = 0; i < this.objects.length; i++)
+  {
+    o = this.objects[i];
+    if (typeof o.pos !== "undefined"
+      && typeof o.pos.x !== "undefined"
+      && typeof o.pos.y !== "undefined"
+      && o.pos.x === x 
+      && o.pos.y === y)
+      res.push(o);
+  }
+  return res;
 }
 
 // ---------------------------------------
@@ -294,12 +361,15 @@ PKMNIO.Obj = function (args)
     var args = {};
 
   this.id = Utils.genUUID();
+  this.type = "object";
   this.pos = args.pos || undefined;
   this.pic = args.pic || "";
   this.map = args.map || undefined;
   this.colour = args.colour || undefined;
-  this.event = args.event || Events.nothing;
+  this.orientation = args.orientation || 'down';
+  this.event = args.event || "nothing";
   this.eventArgs = args.eventArgs || [];
+  this.walkable = false;
 
   if (this.map)
     this.map.objects.push(this);
@@ -322,12 +392,32 @@ PKMNIO.Obj.prototype.move = function (x, y)
 
 PKMNIO.Obj.prototype.draw = function ()
 {
-  var t = WORLD[this.pos.y][this.pos.x];
+  
+  if (typeof this.pos === "undefined" 
+    || typeof !this.pos.x === "undefined" 
+    || typeof !this.pos.y === "undefined")
+    return;
+  this.box = blessed.box({
+    parent: SCR,
+    top: this.pos.y,
+    left: this.pos.x,
+    width: 1,
+    height: 1,
+    tags: true,
+    bg: this.colour,
+    content: '{bold}'+this.pic+'{/bold}'
+  });
+  // this.box.setIndex(100);
 
-  if (this.pic)
-    t.content = '{bold}'+this.pic+'{/bold}';
+  OBJECTS[this.pos.y][this.pos.x] = this.box;
 
   SCR.render();
+}
+
+PKMNIO.Obj.prototype.callEvent = function ()
+{
+
+  return Events[this.event](this, this.eventArgs);
 }
 
 // ---------------------------------------
@@ -338,6 +428,7 @@ PKMNIO.Pkmn = function (args)
     args = {};
 
   PKMNIO.Obj.call(this, args);
+  this.type = "pokemon";
   this.name = args.name || "MissingNo";
   this.pic = "o";
 }
@@ -346,6 +437,7 @@ PKMNIO.Pkmn.prototype = new PKMNIO.Obj();
 
 PKMNIO.Pkmn.prototype.growl = function ()
 {
+
   Utils.echo("grr "+this.name + " " + Math.floor(10*Math.random()));
 }
 
@@ -357,6 +449,7 @@ PKMNIO.Person = function (args)
     args = {};
 
   PKMNIO.Obj.call(this, args);
+  this.type = "person";
   this.name = args.name || "weirdo";
   this.pic = args.pic || "x";
   this.team = args.team || [];
@@ -380,25 +473,25 @@ PKMNIO.Tile = function (args)
 
   PKMNIO.Obj.call(this, args);
 
-    if (args.type && args.type in TileTypes)
-    {
-      var type = TileTypes[args.type];
-      this.colour = type.colour;
-      this.pic = type.pic;
-      this.event = type.event;
-      this.walkable = type.walkable;
-    }
-    else
-    {
-      this.colour = args.colour || "white"; // yellow
-      this.pic = args.pic || " ";
-      this.event = undefined;
-      this.walkable = true;
-    }
+  this.type = "tile";
+  if (args.type && args.type in TileTypes)
+  {
+    var type = TileTypes[args.type];
+    this.colour = type.colour;
+    this.pic = type.pic;
+    this.event = type.event;
+    this.walkable = type.walkable;
   }
+  else
+  {
+    this.colour = args.colour || "white"; // yellow
+    this.pic = args.pic || " ";
+    this.event = undefined;
+    this.walkable = true;
+  }
+}
 
 PKMNIO.Tile.prototype = new PKMNIO.Obj();
-
 
 // ---------------------------------------
 //          INIT
@@ -424,9 +517,11 @@ PKMNIO.Tile.prototype = new PKMNIO.Obj();
     map: whitevilla,
     pos: {x: 3, y: 4},
     colour: "green",
-    pic: "@"
+    pic: "v",
+    orientation: 'down'
   });
 
   Utils.initgfx();
-  Green.map.draw();
+  Green.map.drawTiles();
+  Green.map.drawObjects();
 })();

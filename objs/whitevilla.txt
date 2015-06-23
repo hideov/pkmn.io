@@ -11,7 +11,8 @@
   {
     "type": "Person",
     "name": "Vaiolo",
-    "event": "trainer",
+    "event": "battle",
+    "eventArgs": [{"type": "trainer"}],
     "team": [
       {
         "name": "undefined"
