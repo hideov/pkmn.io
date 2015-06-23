@@ -1,16 +1,16 @@
 [
   {
     "type": "Person",
-    "name": "Mele",
+    "name": "M",
     "event": "personTalk",
-    "eventArgs": ["Oddio quanto sono grosso"],
+    "eventArgs": ["WUT?"],
     "pic": "O",
     "colour": "red",
     "pos": { "x": 10, "y": 10 }
   },
   {
     "type": "Person",
-    "name": "Maiolo",
+    "name": "Vaiolo",
     "event": "trainer",
     "team": [
       {
