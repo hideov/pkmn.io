@@ -8,11 +8,9 @@ var fs = require('fs'),
 
 Maps = [];
 
-Objects = [];
+Pokemon = {};
 
-Tiles = [];
-
-//---------------
+//----------  Events
 
 Events = {};
 
@@ -22,8 +20,8 @@ Events.nothing = function (caller, args)
 
 Events.battle = function (caller, args)
 {
-  this.type = (args && args[0] && args[0].type) ? args[0].type : "wild";
-  if (this.type === "wild")
+  this.type = (args && args[0] && args[0].type) ? args[0].type : 'wild';
+  if (this.type === 'wild')
   {
     var chance = Math.random();
     if (chance < 0.15)
@@ -32,19 +30,23 @@ Events.battle = function (caller, args)
       var n = Green.map.wild.length;
       if (n <= 0)
         return;
-      Green.map.wild[Math.floor(n*Math.random())].growl();
+      // Green.map.wild[Math.floor(n*Math.random())].growl();
+      new Battle({
+        rival: new Pkmn(Green.map.wild[Math.floor(n*Math.random())]),
+        myself: Green.team[0], // oops
+        environment: 'green',
+      })
     }
   }
-  else if (this.type === "trainer")
+  else if (this.type === 'trainer')
   {
-    Utils.echo("battle " + JSON.stringify(caller.team))
+    Utils.echo('battle ' + JSON.stringify(caller.team))
   }
 }
 
 Events.personTalk = function (caller, args)
 {
-
-  PKMNIO.Person.prototype.talk.apply(caller, args);
+  Person.prototype.talk.apply(caller, args);
 }
 
 //-------------
@@ -52,22 +54,22 @@ Events.personTalk = function (caller, args)
 TileTypes = {
   'g': {
     colour: 'green',
-    pic: " ",
-    event: "battle",
-    eventArgs: [{type: "wild"}],
+    pic: ' ',
+    event: 'battle',
+    eventArgs: [{type: 'wild'}],
     walkable: true,
   },
   '_': {
     colour: 'white',
-    pic: " ",
-    event: "nothing",
+    pic: ' ',
+    event: 'nothing',
     eventArgs: [],
     walkable: true,
   },
   '#': {
     colour: 'brown',
-    pic: " ",
-    event: "nothing",
+    pic: ' ',
+    event: 'nothing',
     eventArgs: [],
     walkable: false,
   }
@@ -95,7 +97,7 @@ Utils.genUUID = function ()
 Utils.loadMap = function(map)
 {
   // load tiles
-  mapfile = fs.readFileSync('maps/'+map+'.txt', "utf-8").split("\n");
+  mapfile = fs.readFileSync('maps/'+map+'.txt', 'utf-8').split('\n');
   var h = 0;
   var w = mapfile[0].length;
   var l, fileline;
@@ -109,7 +111,7 @@ Utils.loadMap = function(map)
     fileline = mapfile[y].split('');
     for (var x = 0; x < w; x++)
     {
-      l.push(new PKMNIO.Tile({pos: {x: x, y: y}, type: fileline[x]}));
+      l.push(new Tile({pos: {x: x, y: y}, type: fileline[x]}));
     }
     tiles.push(l);
     h++;
@@ -117,15 +119,15 @@ Utils.loadMap = function(map)
 
   // load objects
   var objects = [];
-  var objs = JSON.parse(fs.readFileSync('objs/'+map+'.txt', "utf-8"));
+  var objs = JSON.parse(fs.readFileSync('objs/'+map+'.txt', 'utf-8'));
   for (var i = 0; i < objs.length; i++)
   {
     var o = objs[i]; // is my obj proto
-    var r = new PKMNIO[o.type]({
-      name: o.name || "thing/guy",
-      event: o.event || "nothing",
+    var r = new GLOBAL[o.type]({
+      name: o.name || 'thing/guy',
+      event: o.event || 'nothing',
       eventArgs: o.eventArgs || [],
-      pic: o.pic || " ",
+      pic: o.pic || ' ',
       pos: o.pos,
       colour: o.colour,
       team: o.team,
@@ -171,7 +173,7 @@ Utils.initgfx = function ()
   });
 
   SCR.key('c', function() {
-    Utils.echo("cane");
+    Utils.echo('cane');
   });
 
   SCR.key(['right', 'left', 'up', 'down'], function(ch, key) {
@@ -258,6 +260,417 @@ Utils.initgfx = function ()
   SCR.render();
 }
 
+// ------------------
+
+
+
+var Battle = function (battle) {
+
+  this.rival = battle.rival;
+  this.myself = battle.myself;
+  this.environmentBg = battle.environment;
+
+  this.initGfx();
+};
+
+Battle.prototype.initGfx = function () {
+  var pthis = this;
+  
+  this.formW = 60;
+  this.formH = 21;
+  this.formBg = 'yellow';
+
+  this.form = blessed.form({
+    parent: SCR,
+    keys: true,
+    left: 0,
+    top: 0,
+    width: pthis.formW,
+    height: pthis.formH,
+    bg: pthis.formBg,
+  });
+
+  // choices/textbox
+
+  this.choices = blessed.list({
+    parent: pthis.form,
+    left: 1,
+    bottom: 1,
+    width: pthis.formW - 24,
+    height: 5,
+    padding: { left: 1, right: 1 },
+    mouse: true,
+    keys: false,
+    style: {
+      selected: {
+        bg: 'red'
+      }
+    },
+    items: [
+      'uno', 
+      'due', 
+      'tre', 
+      'quattro', 
+      'uno', 
+      'due', 
+      'tre', 
+      'quattro'
+    ],
+  });
+
+  this.outputbox = blessed.box({
+    parent: pthis.form,
+    left: 1,
+    bottom: 1,
+    height: 5,
+    width: pthis.formW - 24,
+  });
+
+  this.textbox = blessed.text({
+    parent: pthis.outputbox,
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 4,
+    padding: { left: 1, right: 1 },
+    mouse: true,
+    keys: true,
+    content: 'a wild pokemon appeared',
+  });
+
+  this.textbtn = blessed.button({
+    parent: pthis.outputbox,
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: 4,
+    mouse: true,
+    keys: true,
+    padding: { left: 1, right: 1 },
+    content: 'OK',
+    align: 'center',
+    valign: 'middle',
+    style: {
+      bg: 'blue',
+      focus: {
+        bg: 'red'
+      },
+      hover: {
+        bg: 'red'
+      }
+    },
+  });
+
+  // battle field
+
+  this.myHpValue = blessed.text({
+    parent: pthis.form,
+    right: 1,
+    bottom: 7,
+    width: 9,
+    padding: { left: 1, right: 1 },
+    content: pthis.myself.hp + '/' + pthis.myself.totalHp,
+  });
+
+  this.myName = blessed.text({
+    parent: pthis.form,
+    bottom: 9,
+    left: 1,
+    height: 1,
+    width: pthis.formW - 2,
+    padding: { left: 1, right: 1 },
+    content: pthis.myself.name,
+  });
+
+  this.myHpLable = blessed.text({
+    parent: pthis.form,
+    bottom: 7,
+    left: 1,
+    height: 1,
+    padding: { left: 1, right: 1 },
+    content: 'hp:',
+  });
+
+  this.myHp = blessed.progressbar({
+    parent: pthis.form,
+    bottom: 7,
+    left: 6,
+    height: 1,
+    width: pthis.formW - 17,
+    filled: 100 * pthis.rival.hp/pthis.rival.totalHp,
+    pch: '#',
+  });
+
+  //
+
+  this.rivalName = blessed.text({
+    parent: pthis.form,
+    top: 1,
+    left: 1,
+    height: 1,
+    width: pthis.formW - 2,
+    padding: { left: 1, right: 1 },
+    content: pthis.rival.name,
+  });
+
+  this.rivalHpLable = blessed.text({
+    parent: pthis.form,
+    top: 3,
+    left: 1,
+    height: 1,
+    padding: { left: 1, right: 1 },
+    content: 'hp:',
+  });
+
+  this.rivalHp = blessed.progressbar({
+    parent: pthis.form,
+    top: 3,
+    left: 6,
+    height: 1,
+    width: pthis.formW - 7,
+    filled: 100 * pthis.rival.hp/pthis.rival.totalHp,
+    pch: '#',
+  });
+
+  //
+
+  this.environment = blessed.box({
+    parent: pthis.form,
+    top: 5,
+    bottom: 11,
+    left: 1,
+    right: 1,
+    style: { bg: pthis.environmentBg },
+  });
+
+  // buttons
+
+  this.fight = blessed.button({
+    parent: pthis.form,
+    mouse: true,
+    keys: false,
+    shrink: true,
+    width: 10,
+    padding: {
+      left: 1,
+      right: 1
+    },
+    align: 'center',
+    tight: 1,
+    bottom: 5,
+    right: 12,
+    name: 'fight',
+    content: 'FIGHT',
+    style: {
+      bg: 'blue',
+      focus: {
+        bg: 'red'
+      },
+      hover: {
+        bg: 'red'
+      }
+    },
+  });
+
+  this.bag = blessed.button({
+    parent: pthis.form,
+    mouse: true,
+    keys: true,
+    shrink: true,
+    width: 10,
+    padding: {
+      left: 1,
+      right: 1
+    },
+    align: 'center',
+    tight: 1,
+    bottom: 5,
+    right: 1,
+    name: 'bag',
+    content: 'BAG',
+    style:  {
+      bg: 'blue',
+      focus: {
+        bg: 'red'
+      },
+      hover: {
+        bg: 'red'
+      }
+    },
+  });
+
+  this.pkmn = blessed.button({
+    parent: pthis.form,
+    mouse: true,
+    keys: true,
+    shrink: true,
+    width: 10,
+    padding: {
+      left: 1,
+      right: 1
+    },
+    align: 'center',
+    tight: 1,
+    bottom: 3,
+    right: 12,
+    name: 'pkmn',
+    content: 'PKMN',
+    style:  {
+      bg: 'blue',
+      focus: {
+        bg: 'red'
+      },
+      hover: {
+        bg: 'red'
+      }
+    },
+  });
+
+  this.run = blessed.button({
+    parent: pthis.form,
+    mouse: true,
+    keys: true,
+    shrink: true,
+    width: 10,
+    padding: {
+      left: 1,
+      right: 1
+    },
+    align: 'center',
+    tight: 1,
+    bottom: 3,
+    right: 1,
+    name: 'run',
+    content: 'RUN',
+    style:  {
+      bg: 'blue',
+      focus: {
+        bg: 'red'
+      },
+      hover: {
+        bg: 'red'
+      }
+    },
+  });
+
+  this.down = blessed.button({
+    parent: pthis.form,
+    mouse: true,
+    keys: true,
+    shrink: true,
+    width: 10,
+    padding: {
+      left: 1,
+      right: 1
+    },
+    align: 'center',
+    tight: 1,
+    bottom: 1,
+    right: 12,
+    name: 'down',
+    content: 'v',
+    style:  {
+      bg: 'blue',
+      focus: {
+        bg: 'red'
+      },
+      hover: {
+        bg: 'red'
+      }
+    },
+  });
+
+  this.up = blessed.button({
+    parent: pthis.form,
+    mouse: true,
+    keys: true,
+    shrink: true,
+    width: 10,
+    padding: {
+      left: 1,
+      right: 1
+    },
+    align: 'center',
+    tight: 1,
+    bottom: 1,
+    right: 1,
+    name: 'up',
+    content: '^',
+    style:  {
+      bg: 'blue',
+      focus: {
+        bg: 'red'
+      },
+      hover: {
+        bg: 'red'
+      }
+    },
+  });
+
+  //
+
+  this.pkmn.on('press', function() {
+    pthis.pkmncmd();
+  });
+
+  this.bag.on('press', function() {
+    pthis.bagcmd();
+  });
+
+  this.fight.on('press', function() {
+    pthis.fightcmd();
+  });
+
+  this.run.on('press', function() {
+    pthis.runcmd();
+  });
+
+  this.down.on('press', function() {
+    pthis.choices.down(1);
+  });
+
+  this.up.on('press', function() {
+    pthis.choices.up(1);
+  });
+
+  this.textbtn.on('press', function() {
+    pthis.echobtn();
+  });
+
+  SCR.render();
+};
+
+Battle.prototype.pkmncmd = function () {
+  this.echo('pkmn.');
+};
+
+Battle.prototype.bagcmd = function () {
+  this.echo('bag.');
+};
+
+Battle.prototype.fightcmd = function () {
+  this.echo('fight');
+};
+
+Battle.prototype.runcmd = function () {
+  this.echo('run');
+};
+
+Battle.prototype.echo = function (msg) {
+  this.textbox.setContent(msg);
+  this.outputbox.hidden = false;
+  SCR.render();
+};
+
+Battle.prototype.echobtn = function () {
+  this.outputbox.hidden = true;
+  SCR.render();
+};
+
+Battle.prototype.updateStatus = function {
+  SCR.render();
+};
+
 // ---------------------------------------
 
 var Map = function (args)
@@ -266,7 +679,7 @@ var Map = function (args)
     args = {};
 
   this.id = Utils.genUUID();
-  this.name = args.name || "number island";
+  this.name = args.name || 'number island';
   this.wild = args.wild || []; // [new pkmn()]
   this.objects = args.objects || [];
   this.width = args.width || 10;
@@ -281,7 +694,7 @@ var Map = function (args)
       var l = [];
       for (var x = 0; x < this.width; x++)
       {
-        l.push(new PKMNIO.Tile({pos: {x: x, y: y}}));
+        l.push(new Tile({pos: {x: x, y: y}}));
         l[x].setIndex(0);
       }
       this.tiles.push(l);
@@ -340,9 +753,9 @@ Map.prototype.getObjectsAtCoord = function (y, x)
   for (var i = 0; i < this.objects.length; i++)
   {
     o = this.objects[i];
-    if (typeof o.pos !== "undefined"
-      && typeof o.pos.x !== "undefined"
-      && typeof o.pos.y !== "undefined"
+    if (typeof o.pos !== 'undefined'
+      && typeof o.pos.x !== 'undefined'
+      && typeof o.pos.y !== 'undefined'
       && o.pos.x === x 
       && o.pos.y === y)
       res.push(o);
@@ -352,22 +765,19 @@ Map.prototype.getObjectsAtCoord = function (y, x)
 
 // ---------------------------------------
 
-var PKMNIO = function () {
-}
-
-PKMNIO.Obj = function (args)
+Obj = function (args)
 {
   if (!args)
     var args = {};
 
   this.id = Utils.genUUID();
-  this.type = "object";
+  this.type = 'object';
   this.pos = args.pos || undefined;
-  this.pic = args.pic || "";
+  this.pic = args.pic || '';
   this.map = args.map || undefined;
   this.colour = args.colour || undefined;
   this.orientation = args.orientation || 'down';
-  this.event = args.event || "nothing";
+  this.event = args.event || 'nothing';
   this.eventArgs = args.eventArgs || [];
   this.walkable = false;
 
@@ -375,14 +785,14 @@ PKMNIO.Obj = function (args)
     this.map.objects.push(this);
 }
 
-PKMNIO.Obj.prototype.place = function (x, y)
+Obj.prototype.place = function (x, y)
 {
   this.map.tiles[this.pos.y][this.pos.x].draw();
   this.pos = {x: x, y: y};
   this.draw();
 }
 
-PKMNIO.Obj.prototype.move = function (x, y)
+Obj.prototype.move = function (x, y)
 {
   this.map.tiles[this.pos.y][this.pos.x].draw();
   this.pos.x += x;
@@ -390,12 +800,12 @@ PKMNIO.Obj.prototype.move = function (x, y)
   this.draw();
 }
 
-PKMNIO.Obj.prototype.draw = function ()
+Obj.prototype.draw = function ()
 {
   
-  if (typeof this.pos === "undefined" 
-    || typeof !this.pos.x === "undefined" 
-    || typeof !this.pos.y === "undefined")
+  if (typeof this.pos === 'undefined' 
+    || typeof !this.pos.x === 'undefined' 
+    || typeof !this.pos.y === 'undefined')
     return;
   this.box = blessed.box({
     parent: SCR,
@@ -414,7 +824,7 @@ PKMNIO.Obj.prototype.draw = function ()
   SCR.render();
 }
 
-PKMNIO.Obj.prototype.callEvent = function ()
+Obj.prototype.callEvent = function ()
 {
 
   return Events[this.event](this, this.eventArgs);
@@ -422,58 +832,60 @@ PKMNIO.Obj.prototype.callEvent = function ()
 
 // ---------------------------------------
 
-PKMNIO.Pkmn = function (args)
+Pkmn = function (args)
 {
   if (!args)
     args = {};
 
-  PKMNIO.Obj.call(this, args);
-  this.type = "pokemon";
-  this.name = args.name || "MissingNo";
-  this.pic = "o";
-}
+  Obj.call(this, args);
+  this.type = 'pokemon';
+  this.name = args.name || 'MissingNo';
+  this.pic = 'o';
+  this.hp = args.hp;
+  this.totalHp = args.totalHp;
+};
 
-PKMNIO.Pkmn.prototype = new PKMNIO.Obj();
+Pkmn.prototype = new Obj();
 
-PKMNIO.Pkmn.prototype.growl = function ()
+Pkmn.prototype.growl = function ()
 {
 
-  Utils.echo("grr "+this.name + " " + Math.floor(10*Math.random()));
+  Utils.echo('grr '+this.name + ' ' + Math.floor(10*Math.random()));
 }
 
 // ---------------------------------------
 
-PKMNIO.Person = function (args)
+Person = function (args)
 {
   if (!args)
     args = {};
 
-  PKMNIO.Obj.call(this, args);
-  this.type = "person";
-  this.name = args.name || "weirdo";
-  this.pic = args.pic || "x";
+  Obj.call(this, args);
+  this.type = 'person';
+  this.name = args.name || 'weirdo';
+  this.pic = args.pic || 'x';
   this.team = args.team || [];
 }
 
-PKMNIO.Person.prototype = new PKMNIO.Obj();
+Person.prototype = new Obj();
 
-PKMNIO.Person.prototype.talk = function (msg)
+Person.prototype.talk = function (msg)
 {
   if (!msg)
     mst = this.eventArgs[0];
-  Utils.echo(this.name + " " + msg);
+  Utils.echo(this.name + ' ' + msg);
 }
 
 //----------------------------
 
-PKMNIO.Tile = function (args)
+Tile = function (args)
 {
   if (!args)
     args = {};
 
-  PKMNIO.Obj.call(this, args);
+  Obj.call(this, args);
 
-  this.type = "tile";
+  this.type = 'tile';
   if (args.type && args.type in TileTypes)
   {
     var type = TileTypes[args.type];
@@ -484,27 +896,41 @@ PKMNIO.Tile = function (args)
   }
   else
   {
-    this.colour = args.colour || "white"; // yellow
-    this.pic = args.pic || " ";
+    this.colour = args.colour || 'white'; // yellow
+    this.pic = args.pic || ' ';
     this.event = undefined;
     this.walkable = true;
   }
 }
 
-PKMNIO.Tile.prototype = new PKMNIO.Obj();
+Tile.prototype = new Obj();
 
 // ---------------------------------------
 //          INIT
 
 (function ()
 {
+  // fix these, they myst be prototypes
+
+  Pokemon.pidgey = {
+    name: 'pidgey',
+    totalHp: 70,
+    hp: 30,
+  };
+
+  Pokemon.rattata = {
+    name: 'rattata',
+    totalHp: 20,
+    hp: 3,
+  };
+
   var wild = [];
-  wild.push(new PKMNIO.Pkmn({name: "pidgey"}));
-  wild.push(new PKMNIO.Pkmn({name: "rattata"}));
+  wild.push(Pokemon.pidgey);
+  wild.push(Pokemon.rattata);
   //
   var m = Utils.loadMap('whitevilla');
   var whitevilla = new Map({
-    name: "whitevilla",
+    name: 'whitevilla',
     tiles: m.tiles,
     wild: wild,
     objects: m.objects,
@@ -512,14 +938,17 @@ PKMNIO.Tile.prototype = new PKMNIO.Obj();
     height: m.height,
   });
 
-  Green = new PKMNIO.Person({
-    name: "Verde",
+  Green = new Person({
+    name: 'Verde',
     map: whitevilla,
     pos: {x: 3, y: 4},
-    colour: "green",
-    pic: "v",
-    orientation: 'down'
+    colour: 'green',
+    pic: 'v',
+    orientation: 'down',
+    team: [new Pkmn(Pokemon.pidgey)]
   });
+
+  // console.log(Green);
 
   Utils.initgfx();
   Green.map.drawTiles();
